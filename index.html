@@ -444,11 +444,15 @@
         document.getElementById('resultado-manual').classList.add('hidden');
         const urlRAE = `https://dle.rae.es/${encodeURIComponent(palabra)}`;
         try {
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlRAE)}`;
-            const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const json = await r.json();
-            const def = extraerDefHTML(json.contents);
+            const proxies = [
+                async () => { const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(urlRAE)}`, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(); return r.text(); },
+                async () => { const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlRAE)}`, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(); return (await r.json()).contents; },
+                async () => { const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlRAE)}`, { signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(); return r.text(); }
+            ];
+            let html = null;
+            for (const proxy of proxies) { try { html = await proxy(); if (html) break; } catch {} }
+            if (!html) throw new Error('todos los proxies fallaron');
+            const def = extraerDefHTML(html);
             if (!def) throw new Error('sin definición');
             document.getElementById('palabra-encontrada').textContent = palabra;
             document.getElementById('link-rae').href = urlRAE;
