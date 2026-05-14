@@ -534,7 +534,7 @@
                 <div class="flex gap-2 p-3 bg-stone-50 rounded-xl items-start">
                     <div class="flex-1 min-w-0">
                         <span class="font-semibold text-stone-800">${esc(p.palabra)}</span>
-                        <p class="text-sm text-stone-600 mt-0.5 leading-relaxed">${esc(p.definicion)}</p>
+                        <p class="text-sm text-stone-600 mt-0.5 leading-relaxed whitespace-pre-wrap">${esc(p.definicion)}</p>
                     </div>
                     <button onclick="eliminarPalabra(${i})"
                         class="shrink-0 text-stone-300 hover:text-red-400 transition-colors text-xl leading-none" title="Eliminar">×</button>
@@ -579,7 +579,7 @@
                     ${pals.length
                         ? pals.map(p => `<div class="text-sm py-1.5 border-b border-stone-50 last:border-0">
                             <span class="font-semibold text-stone-700">${esc(p.palabra)}</span>
-                            <span class="text-stone-500"> — ${esc(p.definicion)}</span></div>`).join('')
+                            <span class="text-stone-500 whitespace-pre-wrap"> — ${esc(p.definicion)}</span></div>`).join('')
                         : '<p class="text-sm text-stone-400">Sin palabras.</p>'}
                 </div></details>`;
         }).join('');
