@@ -476,9 +476,9 @@
         if (!items.length) items = doc.querySelectorAll('li.j');
         if (items.length) {
             return Array.from(items).slice(0, 4)
-                .map(el => el.textContent.replace(/\s+/g, ' ').trim())
+                .map(el => el.textContent.replace(/\s+/g, ' ').replace(/Sin\.:/g, '\nSin.:').trim())
                 .filter(t => t.length > 4)
-                .join('\n');
+                .join('\n\n');
         }
         return null;
     }
