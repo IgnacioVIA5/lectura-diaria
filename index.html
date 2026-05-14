@@ -444,12 +444,11 @@
         document.getElementById('resultado-manual').classList.add('hidden');
         const urlRAE = `https://dle.rae.es/${encodeURIComponent(palabra)}`;
         try {
-            const r = await fetch(`https://rae-api.com/api/words/${encodeURIComponent(palabra)}`, {
-                signal: AbortSignal.timeout(7000)
-            });
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlRAE)}`;
+            const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const json = await r.json();
-            const def = extraerDefJSON(json);
+            const def = extraerDefHTML(json.contents);
             if (!def) throw new Error('sin definición');
             document.getElementById('palabra-encontrada').textContent = palabra;
             document.getElementById('link-rae').href = urlRAE;
@@ -466,18 +465,22 @@
         btn.disabled = false;
     }
 
-    function extraerDefJSON(json) {
-        const listas = [json?.definitions, json?.acepciones, json?.meanings, json?.data?.definitions];
-        const lista = listas.find(l => Array.isArray(l) && l.length > 0);
-        if (lista) {
-            return lista.slice(0, 3).map(item => {
-                const texto = item.definition || item.meaning || item.text || item.definicion || '';
-                const cat   = item.category   || item.categoria || item.pos || '';
-                return (cat ? `[${cat}] ` : '') + texto;
-            }).filter(Boolean).join('\n');
+    function extraerDefHTML(html) {
+        if (!html) return null;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const defs = doc.querySelectorAll('article p.j');
+        if (defs.length) {
+            return Array.from(defs).slice(0, 3)
+                .map(el => el.textContent.replace(/\s+/g, ' ').trim())
+                .filter(t => t.length > 4)
+                .join('\n');
         }
-        // Fallback: string directo
-        if (typeof json?.definition === 'string') return json.definition;
+        // Fallback: cualquier párrafo dentro de article
+        const art = doc.querySelector('article');
+        if (art) {
+            const ps = Array.from(art.querySelectorAll('p')).filter(p => p.textContent.trim().length > 10);
+            if (ps.length) return ps.slice(0, 3).map(p => p.textContent.replace(/\s+/g, ' ').trim()).join('\n');
+        }
         return null;
     }
 
