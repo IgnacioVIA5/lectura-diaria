@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lectura Diaria</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .progress-bar { transition: width 0.4s ease; }
+        details summary { list-style: none; }
+        details summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+<body class="bg-amber-50 min-h-screen text-stone-800">
+
+    <!-- Modal Setup PAT -->
+    <div id="modal-setup" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h2 class="text-lg font-bold mb-1">Conectar con GitHub</h2>
+            <p class="text-sm text-stone-500 mb-4">
+                Necesitas un token de GitHub para sincronizar entre iPhone y PC. Se crea gratis en segundos.
+            </p>
+            <a id="link-crear-token"
+               href="https://github.com/settings/tokens/new?scopes=gist&description=Lectura+Diaria"
+               target="_blank" rel="noopener"
+               class="flex items-center gap-1 text-sm text-amber-700 hover:underline mb-4 font-medium">
+                1. Crear token en GitHub (scope: gist) →
+            </a>
+            <p class="text-xs text-stone-500 mb-1">2. Pega el token aquí:</p>
+            <input id="input-pat" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                autocomplete="off" autocorrect="off" autocapitalize="none"
+                class="w-full border border-stone-300 rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <button onclick="guardarPAT()"
+                class="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-semibold text-sm transition-colors">
+                Conectar
+            </button>
+            <p id="error-pat" class="hidden text-xs text-red-600 mt-2 text-center"></p>
+        </div>
+    </div>
+
+    <!-- Overlay loading -->
+    <div id="overlay-loading" class="hidden fixed inset-0 bg-amber-50 z-40 flex items-center justify-center">
+        <div class="text-center">
+            <div class="text-4xl mb-3">📖</div>
+            <p class="text-sm text-stone-500">Cargando datos...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-stone-200 px-5 py-3.5 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <div>
+            <h1 class="text-lg font-bold leading-tight">Lectura Diaria</h1>
+            <p id="fecha-hoy" class="text-xs text-stone-400 capitalize"></p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="sync-status" class="text-xs text-stone-400"></span>
+            <div class="text-right">
+                <p class="text-xl font-bold text-amber-500 leading-none" id="racha-numero">0</p>
+                <p class="text-xs text-stone-400">días</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-xl mx-auto p-4 space-y-4 pb-10">
+
+        <!-- TEMPORIZADOR -->
+        <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+            <h2 class="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-4">Sesión de hoy</h2>
+
+            <div class="text-center mb-5">
+                <div id="timer-display" class="text-5xl font-mono font-bold tracking-tight">00:00:00</div>
+                <p class="text-xs text-stone-400 mt-1">sesión actual</p>
+            </div>
+
+            <div class="flex gap-2 justify-center mb-5">
+                <button id="btn-iniciar" onclick="iniciarTimer()"
+                    class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium text-sm transition-colors">
+                    Iniciar
+                </button>
+                <button id="btn-pausar" onclick="pausarTimer()"
+                    class="hidden px-6 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl font-medium text-sm transition-colors">
+                    Pausar
+                </button>
+                <button id="btn-detener" onclick="detenerTimer()"
+                    class="hidden px-6 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl font-medium text-sm transition-colors">
+                    Detener
+                </button>
+            </div>
+
+            <div class="mb-4">
+                <div class="flex justify-between items-center text-sm mb-1.5">
+                    <span class="text-stone-600">Total hoy: <span id="tiempo-acumulado" class="font-semibold text-stone-800">0 min</span></span>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-stone-400">Meta:</span>
+                        <input id="meta-input" type="number" min="5" max="240" value="30"
+                            onchange="guardarMeta()"
+                            class="w-12 text-center text-sm font-medium border border-stone-300 rounded-lg px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                        <span class="text-xs text-stone-400">min</span>
+                    </div>
+                </div>
+                <div class="bg-stone-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="progress-bar" class="h-2.5 bg-amber-400 rounded-full progress-bar" style="width:0%"></div>
+                </div>
+            </div>
+
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-stone-50 cursor-pointer hover:bg-stone-100 transition-colors">
+                <input type="checkbox" id="check-leido" onchange="toggleLeido()" class="w-4 h-4 accent-amber-500">
+                <span class="text-sm font-medium text-stone-700">Marcar día como completado</span>
+            </label>
+        </section>
+
+        <!-- PALABRAS NUEVAS -->
+        <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+            <h2 class="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-4">Palabras nuevas</h2>
+
+            <div class="flex gap-2 mb-4">
+                <input id="input-palabra" type="text" placeholder="Escribe una palabra..."
+                    onkeydown="if(event.key==='Enter') buscarPalabra()"
+                    autocapitalize="none" autocorrect="off" spellcheck="false"
+                    class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+                <button id="btn-buscar" onclick="buscarPalabra()"
+                    class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
+                    Buscar
+                </button>
+            </div>
+
+            <!-- Resultado automático RAE -->
+            <div id="resultado-rae" class="hidden mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="palabra-encontrada" class="font-bold text-stone-800"></span>
+                    <a id="link-rae" href="#" target="_blank" rel="noopener"
+                        class="text-xs text-amber-700 hover:underline">Ver en RAE →</a>
+                </div>
+                <textarea id="definicion-editable" rows="3"
+                    class="w-full text-sm text-stone-700 bg-white border border-amber-200 rounded-lg p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 leading-relaxed"></textarea>
+                <div class="mt-2 flex justify-end">
+                    <button onclick="guardarPalabra()"
+                        class="px-4 py-1.5 bg-stone-800 hover:bg-stone-700 text-white rounded-lg text-sm font-medium transition-colors">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Fallback manual -->
+            <div id="resultado-manual" class="hidden mb-4 p-4 bg-stone-50 border border-stone-200 rounded-xl">
+                <div class="flex justify-between items-center mb-1">
+                    <span id="palabra-manual" class="font-bold text-stone-800"></span>
+                    <a id="link-rae-manual" href="#" target="_blank" rel="noopener"
+                        class="text-xs text-amber-700 hover:underline">Abrir en RAE →</a>
+                </div>
+                <p class="text-xs text-stone-400 mb-2">La RAE se abrió en otra pestaña. Copia la definición y pégala aquí:</p>
+                <textarea id="definicion-manual" rows="3" placeholder="Pega la definición..."
+                    class="w-full text-sm text-stone-700 bg-white border border-stone-300 rounded-lg p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 leading-relaxed"></textarea>
+                <div class="mt-2 flex justify-end">
+                    <button onclick="guardarPalabraManual()"
+                        class="px-4 py-1.5 bg-stone-800 hover:bg-stone-700 text-white rounded-lg text-sm font-medium transition-colors">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+
+            <div id="lista-palabras-hoy"></div>
+        </section>
+
+        <!-- HISTORIAL -->
+        <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xs font-semibold text-stone-400 uppercase tracking-widest">Historial</h2>
+                <button onclick="exportarCSV()"
+                    class="text-xs px-3 py-1.5 border border-stone-300 hover:bg-stone-50 text-stone-600 rounded-lg transition-colors">
+                    Exportar CSV
+                </button>
+            </div>
+            <div id="lista-historial">
+                <p class="text-sm text-stone-400 text-center py-4">Sin registros anteriores.</p>
+            </div>
+        </section>
+
+        <div class="text-center pt-2">
+            <button onclick="mostrarConfigPAT()" class="text-xs text-stone-400 hover:text-stone-600 underline">
+                Cambiar token de GitHub
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+    // ── FECHA LOCAL ──────────────────────────────────────────────────
+    const HOY = (() => {
+        const d = new Date();
+        return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+    })();
+
+    // ── ESTADO GLOBAL ────────────────────────────────────────────────
+    let datos = { dias: {}, metaDiariaMinutos: 30 };
+    let syncTimeout = null;
+
+    // ── STORAGE LOCAL ────────────────────────────────────────────────
+    const getPAT     = () => localStorage.getItem('lectura_pat') || '';
+    const getGistId  = () => localStorage.getItem('lectura_gist_id') || '';
+    const setCache   = d => localStorage.setItem('lectura_cache', JSON.stringify(d));
+    const getCache   = () => { try { return JSON.parse(localStorage.getItem('lectura_cache')); } catch { return null; } };
+
+    function getDiaHoy() {
+        if (!datos.dias[HOY]) datos.dias[HOY] = { completado: false, tiempoSegundos: 0, palabras: [] };
+        return datos.dias[HOY];
+    }
+
+    // ── GITHUB GIST ──────────────────────────────────────────────────
+    const GIST_FILE = 'lectura_datos.json';
+    const ghHeaders = pat => ({
+        Authorization: `Bearer ${pat}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+    });
+
+    async function cargarDesdeGist() {
+        const pat = getPAT();
+        if (!pat) return;
+        setSyncStatus('sync');
+        try {
+            let gistId = getGistId();
+
+            if (!gistId) {
+                // Buscar gist existente
+                const r = await fetch('https://api.github.com/gists', { headers: ghHeaders(pat) });
+                if (!r.ok) throw new Error(`${r.status}`);
+                const lista = await r.json();
+                const found = lista.find(g => g.files?.[GIST_FILE]);
+                if (found) {
+                    localStorage.setItem('lectura_gist_id', found.id);
+                    gistId = found.id;
+                }
+            }
+
+            if (gistId) {
+                const r = await fetch(`https://api.github.com/gists/${gistId}`, { headers: ghHeaders(pat) });
+                if (!r.ok) throw new Error(`${r.status}`);
+                const gist = await r.json();
+                const content = gist.files?.[GIST_FILE]?.content;
+                if (content) {
+                    datos = JSON.parse(content);
+                    setCache(datos);
+                }
+            }
+            setSyncStatus('ok');
+        } catch (e) {
+            console.error('Gist load error:', e);
+            const cache = getCache();
+            if (cache) datos = cache;
+            setSyncStatus('error');
+        }
+    }
+
+    async function guardarEnGist() {
+        const pat = getPAT();
+        if (!pat) return;
+        setSyncStatus('sync');
+        const body = {
+            description: 'Lectura Diaria — datos',
+            public: false,
+            files: { [GIST_FILE]: { content: JSON.stringify(datos, null, 2) } }
+        };
+        try {
+            const gistId = getGistId();
+            let r;
+            if (gistId) {
+                r = await fetch(`https://api.github.com/gists/${gistId}`, {
+                    method: 'PATCH', headers: ghHeaders(pat), body: JSON.stringify(body)
+                });
+            } else {
+                r = await fetch('https://api.github.com/gists', {
+                    method: 'POST', headers: ghHeaders(pat), body: JSON.stringify(body)
+                });
+                if (r.ok) {
+                    const created = await r.json();
+                    localStorage.setItem('lectura_gist_id', created.id);
+                }
+            }
+            if (r.ok) { setCache(datos); setSyncStatus('ok'); }
+            else throw new Error(`${r.status}`);
+        } catch (e) {
+            console.error('Gist save error:', e);
+            setCache(datos);
+            setSyncStatus('error');
+        }
+    }
+
+    function syncDebounced() {
+        clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(guardarEnGist, 800);
+    }
+
+    function setSyncStatus(s) {
+        const el = document.getElementById('sync-status');
+        el.textContent = s === 'sync' ? '↻' : s === 'ok' ? '✓' : s === 'error' ? '⚠' : '';
+        el.title = s === 'sync' ? 'Sincronizando...' : s === 'ok' ? 'Sincronizado' : s === 'error' ? 'Sin conexión — guardado local' : '';
+    }
+
+    // ── PAT SETUP ────────────────────────────────────────────────────
+    async function guardarPAT() {
+        const pat = document.getElementById('input-pat').value.trim();
+        if (!pat) return;
+        const btn = document.querySelector('#modal-setup button[onclick="guardarPAT()"]');
+        btn.textContent = 'Verificando...';
+        btn.disabled = true;
+        document.getElementById('error-pat').classList.add('hidden');
+        try {
+            const r = await fetch('https://api.github.com/user', { headers: ghHeaders(pat) });
+            if (!r.ok) throw new Error();
+            localStorage.setItem('lectura_pat', pat);
+            localStorage.removeItem('lectura_gist_id');
+            document.getElementById('modal-setup').classList.add('hidden');
+            document.getElementById('overlay-loading').classList.remove('hidden');
+            await cargarDesdeGist();
+            document.getElementById('overlay-loading').classList.add('hidden');
+            renderAll();
+        } catch {
+            const e = document.getElementById('error-pat');
+            e.textContent = 'Token inválido o sin permiso "gist".';
+            e.classList.remove('hidden');
+        }
+        btn.textContent = 'Conectar';
+        btn.disabled = false;
+    }
+
+    function mostrarConfigPAT() {
+        document.getElementById('input-pat').value = '';
+        document.getElementById('error-pat').classList.add('hidden');
+        document.getElementById('modal-setup').classList.remove('hidden');
+    }
+
+    // ── TIMER ────────────────────────────────────────────────────────
+    let timerInterval = null;
+    let segundosActuales = 0;
+    let timerActivo = false;
+
+    const fmt = s => [Math.floor(s/3600), Math.floor((s%3600)/60), s%60].map(n => String(n).padStart(2,'0')).join(':');
+
+    function iniciarTimer() {
+        if (timerActivo) return;
+        timerActivo = true;
+        document.getElementById('btn-iniciar').classList.add('hidden');
+        document.getElementById('btn-pausar').classList.remove('hidden');
+        document.getElementById('btn-detener').classList.remove('hidden');
+        timerInterval = setInterval(() => {
+            segundosActuales++;
+            document.getElementById('timer-display').textContent = fmt(segundosActuales);
+            actualizarProgreso();
+        }, 1000);
+    }
+
+    function pausarTimer() {
+        timerActivo = false;
+        clearInterval(timerInterval);
+        flushTimer();
+        segundosActuales = 0;
+        const btn = document.getElementById('btn-pausar');
+        btn.textContent = 'Reanudar';
+        btn.onclick = reanudarTimer;
+        syncDebounced();
+    }
+
+    function reanudarTimer() {
+        timerActivo = true;
+        const btn = document.getElementById('btn-pausar');
+        btn.textContent = 'Pausar';
+        btn.onclick = pausarTimer;
+        timerInterval = setInterval(() => {
+            segundosActuales++;
+            document.getElementById('timer-display').textContent = fmt(segundosActuales);
+            actualizarProgreso();
+        }, 1000);
+    }
+
+    function detenerTimer() {
+        timerActivo = false;
+        clearInterval(timerInterval);
+        flushTimer();
+        segundosActuales = 0;
+        document.getElementById('timer-display').textContent = '00:00:00';
+        document.getElementById('btn-iniciar').classList.remove('hidden');
+        document.getElementById('btn-pausar').classList.add('hidden');
+        document.getElementById('btn-detener').classList.add('hidden');
+        const btn = document.getElementById('btn-pausar');
+        btn.textContent = 'Pausar';
+        btn.onclick = pausarTimer;
+        actualizarProgreso();
+        renderHistorial();
+        syncDebounced();
+    }
+
+    function flushTimer() {
+        if (segundosActuales > 0) getDiaHoy().tiempoSegundos += segundosActuales;
+    }
+
+    function guardarMeta() {
+        const meta = Math.max(5, parseInt(document.getElementById('meta-input').value) || 30);
+        document.getElementById('meta-input').value = meta;
+        datos.metaDiariaMinutos = meta;
+        actualizarProgreso();
+        syncDebounced();
+    }
+
+    function actualizarProgreso() {
+        const meta = datos.metaDiariaMinutos || 30;
+        const totalSeg = getDiaHoy().tiempoSegundos + segundosActuales;
+        const pct = Math.min(100, (totalSeg / (meta * 60)) * 100);
+        const bar = document.getElementById('progress-bar');
+        bar.style.width = `${pct}%`;
+        bar.classList.toggle('bg-amber-400', pct < 100);
+        bar.classList.toggle('bg-green-400', pct >= 100);
+        document.getElementById('tiempo-acumulado').textContent = `${Math.floor(totalSeg / 60)} min`;
+    }
+
+    function toggleLeido() {
+        getDiaHoy().completado = document.getElementById('check-leido').checked;
+        calcularRacha();
+        renderHistorial();
+        syncDebounced();
+    }
+
+    // ── RACHA ────────────────────────────────────────────────────────
+    function calcularRacha() {
+        const completadas = Object.keys(datos.dias || {}).filter(f => datos.dias[f].completado).sort().reverse();
+        let racha = 0, ref = new Date(HOY + 'T12:00:00');
+        for (const f of completadas) {
+            const diff = Math.round((ref - new Date(f + 'T12:00:00')) / 86400000);
+            if (diff <= 1) { racha++; ref = new Date(f + 'T12:00:00'); } else break;
+        }
+        document.getElementById('racha-numero').textContent = racha;
+    }
+
+    // ── RAE API ──────────────────────────────────────────────────────
+    async function buscarPalabra() {
+        const palabra = document.getElementById('input-palabra').value.trim().toLowerCase();
+        if (!palabra) return;
+        const btn = document.getElementById('btn-buscar');
+        btn.textContent = '...';
+        btn.disabled = true;
+        document.getElementById('resultado-rae').classList.add('hidden');
+        document.getElementById('resultado-manual').classList.add('hidden');
+        const urlRAE = `https://dle.rae.es/${encodeURIComponent(palabra)}`;
+        try {
+            const r = await fetch(`https://rae-api.com/api/words/${encodeURIComponent(palabra)}`, {
+                signal: AbortSignal.timeout(7000)
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const json = await r.json();
+            const def = extraerDefJSON(json);
+            if (!def) throw new Error('sin definición');
+            document.getElementById('palabra-encontrada').textContent = palabra;
+            document.getElementById('link-rae').href = urlRAE;
+            document.getElementById('definicion-editable').value = def;
+            document.getElementById('resultado-rae').classList.remove('hidden');
+        } catch (e) {
+            document.getElementById('palabra-manual').textContent = palabra;
+            document.getElementById('link-rae-manual').href = urlRAE;
+            document.getElementById('definicion-manual').value = '';
+            document.getElementById('resultado-manual').classList.remove('hidden');
+            window.open(urlRAE, '_blank', 'noopener');
+        }
+        btn.textContent = 'Buscar';
+        btn.disabled = false;
+    }
+
+    function extraerDefJSON(json) {
+        const listas = [json?.definitions, json?.acepciones, json?.meanings, json?.data?.definitions];
+        const lista = listas.find(l => Array.isArray(l) && l.length > 0);
+        if (lista) {
+            return lista.slice(0, 3).map(item => {
+                const texto = item.definition || item.meaning || item.text || item.definicion || '';
+                const cat   = item.category   || item.categoria || item.pos || '';
+                return (cat ? `[${cat}] ` : '') + texto;
+            }).filter(Boolean).join('\n');
+        }
+        // Fallback: string directo
+        if (typeof json?.definition === 'string') return json.definition;
+        return null;
+    }
+
+    function guardarPalabra() {
+        _guardarEntrada(
+            document.getElementById('palabra-encontrada').textContent.trim(),
+            document.getElementById('definicion-editable').value.trim()
+        );
+        document.getElementById('resultado-rae').classList.add('hidden');
+    }
+
+    function guardarPalabraManual() {
+        const def = document.getElementById('definicion-manual').value.trim();
+        if (!def) { alert('Escribe o pega la definición antes de guardar.'); return; }
+        _guardarEntrada(
+            document.getElementById('palabra-manual').textContent.trim(),
+            def
+        );
+        document.getElementById('resultado-manual').classList.add('hidden');
+    }
+
+    function _guardarEntrada(palabra, definicion) {
+        if (!palabra || !definicion) return;
+        const dia = getDiaHoy();
+        if (dia.palabras.some(p => p.palabra === palabra)) { alert('Palabra ya registrada hoy.'); return; }
+        dia.palabras.push({ palabra, definicion });
+        document.getElementById('input-palabra').value = '';
+        renderPalabrasHoy();
+        renderHistorial();
+        syncDebounced();
+    }
+
+    // ── RENDER ───────────────────────────────────────────────────────
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    function renderFecha() {
+        document.getElementById('fecha-hoy').textContent =
+            new Date(HOY + 'T12:00:00').toLocaleDateString('es-CL', {
+                weekday:'long', year:'numeric', month:'long', day:'numeric'
+            });
+    }
+
+    function renderPalabrasHoy() {
+        const palabras = getDiaHoy().palabras || [];
+        const el = document.getElementById('lista-palabras-hoy');
+        if (!palabras.length) {
+            el.innerHTML = '<p class="text-sm text-stone-400 text-center py-3">Sin palabras registradas hoy.</p>';
+            return;
+        }
+        el.innerHTML = '<div class="border-t border-stone-100 pt-3 space-y-2">' +
+            palabras.map((p, i) => `
+                <div class="flex gap-2 p-3 bg-stone-50 rounded-xl items-start">
+                    <div class="flex-1 min-w-0">
+                        <span class="font-semibold text-stone-800">${esc(p.palabra)}</span>
+                        <p class="text-sm text-stone-600 mt-0.5 leading-relaxed">${esc(p.definicion)}</p>
+                    </div>
+                    <button onclick="eliminarPalabra(${i})"
+                        class="shrink-0 text-stone-300 hover:text-red-400 transition-colors text-xl leading-none" title="Eliminar">×</button>
+                </div>`).join('') + '</div>';
+    }
+
+    function eliminarPalabra(i) {
+        if (!confirm('¿Eliminar esta palabra?')) return;
+        getDiaHoy().palabras.splice(i, 1);
+        renderPalabrasHoy();
+        renderHistorial();
+        syncDebounced();
+    }
+
+    function renderHistorial() {
+        const el = document.getElementById('lista-historial');
+        const anteriores = Object.keys(datos.dias || {})
+            .filter(f => f !== HOY && (datos.dias[f].tiempoSegundos > 0 || datos.dias[f].palabras?.length))
+            .sort().reverse();
+        if (!anteriores.length) {
+            el.innerHTML = '<p class="text-sm text-stone-400 text-center py-4">Sin registros anteriores.</p>';
+            return;
+        }
+        el.innerHTML = anteriores.map(f => {
+            const dia = datos.dias[f];
+            const fecha = new Date(f + 'T12:00:00').toLocaleDateString('es-CL', {
+                weekday:'short', year:'numeric', month:'short', day:'numeric'
+            });
+            const min = Math.floor(dia.tiempoSegundos / 60);
+            const pals = dia.palabras || [];
+            return `<details class="border border-stone-100 rounded-xl overflow-hidden mb-2">
+                <summary class="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-stone-50 transition-colors">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm ${dia.completado ? 'text-green-500' : 'text-stone-300'}">${dia.completado ? '✓' : '○'}</span>
+                        <span class="text-sm font-medium text-stone-700 capitalize">${fecha}</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-stone-400">
+                        <span>${min} min</span><span>${pals.length} pal.</span><span>▾</span>
+                    </div>
+                </summary>
+                <div class="px-4 pb-3 pt-2 border-t border-stone-100">
+                    ${pals.length
+                        ? pals.map(p => `<div class="text-sm py-1.5 border-b border-stone-50 last:border-0">
+                            <span class="font-semibold text-stone-700">${esc(p.palabra)}</span>
+                            <span class="text-stone-500"> — ${esc(p.definicion)}</span></div>`).join('')
+                        : '<p class="text-sm text-stone-400">Sin palabras.</p>'}
+                </div></details>`;
+        }).join('');
+    }
+
+    // ── CSV ──────────────────────────────────────────────────────────
+    function exportarCSV() {
+        const rows = [['Fecha','Palabra','Definicion']];
+        Object.keys(datos.dias || {}).sort().forEach(f =>
+            (datos.dias[f].palabras || []).forEach(p =>
+                rows.push([f, p.palabra, `"${p.definicion.replace(/"/g,'""')}"`])
+            )
+        );
+        if (rows.length === 1) { alert('No hay palabras para exportar.'); return; }
+        const a = Object.assign(document.createElement('a'), {
+            href: URL.createObjectURL(new Blob(['﻿' + rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' })),
+            download: `glosario_lectura_${HOY}.csv`
+        });
+        a.click();
+    }
+
+    // ── RENDER ALL ───────────────────────────────────────────────────
+    function renderAll() {
+        document.getElementById('meta-input').value = datos.metaDiariaMinutos || 30;
+        document.getElementById('check-leido').checked = getDiaHoy().completado;
+        renderFecha();
+        calcularRacha();
+        actualizarProgreso();
+        renderPalabrasHoy();
+        renderHistorial();
+    }
+
+    // ── INIT ─────────────────────────────────────────────────────────
+    async function init() {
+        renderFecha();
+        const pat = getPAT();
+        if (!pat) {
+            document.getElementById('modal-setup').classList.remove('hidden');
+            return;
+        }
+        document.getElementById('overlay-loading').classList.remove('hidden');
+        const cache = getCache();
+        if (cache) { datos = cache; renderAll(); }
+        await cargarDesdeGist();
+        document.getElementById('overlay-loading').classList.add('hidden');
+        renderAll();
+    }
+
+    init();
+    </script>
+</body>
+</html>
